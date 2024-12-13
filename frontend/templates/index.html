@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP Lounge Scheduler</title>
+    
+    <!-- Add Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Add custom styles -->
+    <style>
+        .shift-cell {
+            width: 50px;
+            text-align: center;
+            font-weight: bold;
+            cursor: pointer;
+            position: relative;
+            height: 40px;
+            padding: 0 !important;
+        }
+    
+        /* Shift colors */
+        .shift-N, .shift-LN, .shift-10N, .shift-10LN { background-color: #D3D3D3; }
+        .shift-L, .shift-SL { background-color: #FFFF99; }
+        .shift-DL { background-color: #90EE90; }
+        .shift-M, .shift-M4 { background-color: #ADD8E6; }
+        .shift-T, .shift-2T { background-color: #FFA07A; }
+        .shift-I { background-color: #E6E6FA; }
+    
+        /* Selection styles */
+        .cell-selected {
+            outline: 3px solid #2563eb !important;
+        }
+    
+        .shift-btn.selected {
+            outline: 2px solid #2563eb;
+            outline-offset: -2px;
+        }
+    
+        /* Layering */
+        .counter-display {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 0.8em;
+            z-index: 1;
+            background: transparent;
+        }
+    
+        .shift-display {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+    
+        /* Hide shift display when empty to show counter */
+        .shift-display:empty {
+            background: transparent !important;
+            z-index: 1;
+        }
+
+        /* Worker name styles */
+        .worker-name {
+            width: 120px;
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .worker-name.violation {
+            background-color: #EF4444;
+            color: white;
+        }
+
+        /* Violation styles */
+        .violation .shift-display {
+            background-color: #FEE2E2 !important;
+        }
+
+        .consecutive-violation {
+            background-color: #EF4444 !important;
+            color: white !important;
+        }
+        .dl-violation {
+        background-color: #22C55E !important; /* Green background */
+        color: white !important;
+    }
+    
+    /* Handle both violations */
+    .dl-violation.violation {
+        background: linear-gradient(135deg, #22C55E 50%, #EF4444 50%) !important;
+    }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <!-- Controls -->
+        <div class="mb-6 flex items-center gap-4">
+            <select id="monthSelect" class="p-2 border rounded">
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+            </select>
+
+            <select id="yearSelect" class="p-2 border rounded">
+                <option value="2024">2024</option>
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+                <option value="2028">2028</option>
+                <option value="2029">2029</option>
+                <option value="2030">2030</option>
+            </select>
+            <!-- Generate First month Button-->
+            <button id="generateBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Generate First Schedule
+            </button>
+            <!-- Transfer Preview Button-->
+            <button id="transferBtn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                Transfer Preview
+            </button>
+            <!-- Transfer Preview Button-->
+            <button id="completeBtn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                Complete Schedule
+            </button>
+            <!-- Load Session Button-->
+            <button id="loadSessionBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Load Last Session
+            </button>
+        </div>
+
+        <div class="mb-6 flex flex-wrap gap-2">
+            <div class="p-2 bg-white rounded shadow">
+                <h3 class="text-sm font-bold mb-2">Regular Shifts</h3>
+                <div class="flex gap-2">
+                    <button class="shift-btn bg-gray-300 px-3 py-1 rounded" data-shift="N">N</button>
+                    <button class="shift-btn bg-gray-300 px-3 py-1 rounded" data-shift="LN">LN</button>
+                    <button class="shift-btn bg-yellow-100 px-3 py-1 rounded" data-shift="L">L</button>
+                    <button class="shift-btn bg-yellow-100 px-3 py-1 rounded" data-shift="SL">SL</button>
+                    <button class="shift-btn bg-green-200 px-3 py-1 rounded" data-shift="DL">DL</button>
+                    <button class="shift-btn bg-blue-100 px-3 py-1 rounded" data-shift="M">M</button>
+                    <button class="shift-btn bg-orange-200 px-3 py-1 rounded" data-shift="T">T</button>
+                    <button class="shift-btn bg-purple-100 px-3 py-1 rounded" data-shift="I">I</button>
+                </div>
+            </div>
+            
+            <div class="p-2 bg-white rounded shadow">
+                <h3 class="text-sm font-bold mb-2">Special Shifts</h3>
+                <div class="flex gap-2">
+                    <button class="shift-btn bg-gray-300 px-3 py-1 rounded" data-shift="10N">10N</button>
+                    <button class="shift-btn bg-gray-300 px-3 py-1 rounded" data-shift="10LN">10LN</button>
+                    <button class="shift-btn bg-blue-100 px-3 py-1 rounded" data-shift="M4">M4</button>
+                    <button class="shift-btn bg-orange-200 px-3 py-1 rounded" data-shift="2T">2T</button>
+                </div>
+            </div>
+        
+            <div class="p-2 bg-white rounded shadow">
+                <h3 class="text-sm font-bold mb-2">Actions</h3>
+                <div class="flex gap-2">
+                    <button id="selectBtn" class="bg-blue-500 text-white px-3 py-1 rounded">Select</button>
+                    <button id="clearBtn" class="bg-gray-500 text-white px-3 py-1 rounded">Clear</button>
+                    <button id="deleteBtn" class="bg-red-500 text-white px-3 py-1 rounded">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Table -->
+        <div id="scheduleContainer" class="overflow-x-auto">
+            <div class="min-w-full border-collapse border">
+                <!-- Table will be dynamically generated here -->
+            </div>
+        </div>
+
+        <!-- Warnings -->
+        <div id="warningsContainer" class="mt-4 space-y-2 font-semibold"></div>
+        <!-- Legend -->
+        <div class="mt-4 text-sm text-gray-600">
+            <p>N = Noche, LN = Ultima Noche, SL/L = Saliente / Libre</p>
+            <p>DL = Domingo libre, M = Mañana, T = Tarde, I = Intermedio</p>
+        </div>
+    </div>
+
+    <!-- Add our JavaScript -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
