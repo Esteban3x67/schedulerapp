@@ -15,15 +15,11 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sys
 
-
-
-print("Step 1: Starting directory creation")
 # Create necessary directories if they don't exist
 if not os.path.exists('autosave'):
     os.makedirs('autosave')
 if not os.path.exists('logs'):
     os.makedirs('logs')
-print("Step 2: Directories created successfully")
 
 print("Step 3: About to configure logging")
 try:
@@ -35,7 +31,7 @@ try:
                 maxBytes=100000, 
                 backupCount=3
             ),
-            logging.StreamHandler(sys.stdout)  # This is the new line that matters
+            logging.StreamHandler(sys.stdout)
         ],
         level=logging.INFO,
         format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
@@ -46,7 +42,7 @@ except Exception as e:
     print(f"Error details: {str(e)}")
     import traceback
     print(traceback.format_exc())
-    
+
 print("Step 5: About to create Flask app")
 app = Flask(__name__, 
     template_folder='frontend/templates',
@@ -717,4 +713,5 @@ def load_session():
         }), 500
     
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
