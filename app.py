@@ -50,11 +50,12 @@ app = Flask(__name__,
 )
 print("Step 6: Flask app created")
 
-app = Flask(__name__, 
-    template_folder='frontend/templates',
-    static_folder='frontend/static'
-)
-CORS(app)
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://scheduler-app-vx70.onrender.com", "http://localhost:5000"],
+        "methods": ["GET", "POST", "OPTIONS"]
+    }
+})
 schedulers = {
     'sala': SchedulerCore(),
     'cocina': SchedulerCore(),
@@ -90,7 +91,9 @@ def get_workers():
 def generate():
     """Generate a schedule"""
     try:
+        logging.info("Generate endpoint called")
         data = request.get_json()
+        logging.info(f"Request data: {data}")
         year = int(data.get('year', 2024))
         month = int(data.get('month', 1))
         group = data.get('group', 'sala')
