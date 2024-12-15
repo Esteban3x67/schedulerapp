@@ -44,9 +44,11 @@ except Exception as e:
     print(traceback.format_exc())
 
 print("Step 5: About to create Flask app")
-app = Flask(__name__, 
+app = Flask(
+    __name__,
     template_folder='frontend/templates',
-    static_folder='frontend/static'
+    static_folder='frontend/static',
+    static_url_path='/static'
 )
 print("Step 6: Flask app created")
 
@@ -56,6 +58,7 @@ CORS(app, resources={
         "methods": ["GET", "POST", "OPTIONS"]
     }
 })
+
 schedulers = {
     'sala': SchedulerCore(),
     'cocina': SchedulerCore(),
@@ -716,5 +719,5 @@ def load_session():
         }), 500
     
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
