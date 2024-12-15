@@ -39,7 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('loadSessionBtn').addEventListener('click', async () => {
         try {
-            const response = await fetch('http://127.0.0.1:5000/api/load-session', {
+            const response = await fetch('/api/load-session'
+
+                , {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -145,7 +147,7 @@ async function generateSchedule() {
     const year = document.getElementById('yearSelect').value;
     
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/generate', {
+        const response = await fetch('api/generate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -169,7 +171,7 @@ async function generateSchedule() {
             updateConsecutiveDays();
             
             try {
-                const verifyResponse = await fetch(`http://127.0.0.1:5000/api/verify-schedule?group=${currentGroup}`);
+                const verifyResponse = await fetch(`/api/verify-schedule?group=${currentGroup}`);
                 const verifyData = await verifyResponse.json();
                 if (verifyData.total_violations > 0) {
                     console.error('Schedule violations found:', verifyData.violations);
@@ -579,7 +581,9 @@ function updateShiftCounters() {
 }
 async function updateShift(worker, day, shift) {
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/update-shift', {
+        const response = await fetch('/api/update-shift'
+
+            , {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -614,7 +618,7 @@ async function updateShift(worker, day, shift) {
             
             // Only verify DLs if we're adding/removing a DL
             if (shift === 'DL' || oldShift === 'DL') {
-                const dlResponse = await fetch(`http://127.0.0.1:5000/api/verify-dl-counts?group=${currentGroup}`);
+                const dlResponse = await fetch(`/api/verify-dl-counts?group=${currentGroup}`);
                 const dlData = await dlResponse.json();
                 if (dlData.success) {
                     console.log('DL Status data:', dlData.dl_status);  // Debug log
@@ -916,7 +920,7 @@ function getDLCount(worker) {
 }
 async function transferPreview() {
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/transfer', {
+        const response = await fetch('/api/transfer', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -958,7 +962,9 @@ async function transferPreview() {
 }
 async function completeGenerate() {
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/complete-generate', {
+        const response = await fetch('/api/complete-generate'
+
+            , {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -981,14 +987,14 @@ async function completeGenerate() {
             };
             
             // Rest of your existing verification code
-            const verifyResponse = await fetch('http://127.0.0.1:5000/api/verify-schedule');
+            const verifyResponse = await fetch('/api/verify-schedule');
             const verifyData = await verifyResponse.json();
             if (verifyData.total_violations > 0) {
                 console.error('Schedule violations found:', verifyData.violations);
             }
             
             // Verify DL counts
-            const dlResponse = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
+            const dlResponse = await fetch('/api/verify-dl-counts');
             const dlData = await dlResponse.json();
             if (dlData.success) {
                 updateDLVerification();
@@ -1030,7 +1036,7 @@ async function updateDLVerification() {
 }
 async function exportToExcel() {
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/export-excel', {
+        const response = await fetch('/api/export-excel', {
             method: 'POST',
         });
         
@@ -1063,7 +1069,8 @@ async function handleFileUpload(event) {
     formData.append('file', file);
 
     try {
-        const response = await fetch(`http://127.0.0.1:5000/api/import-excel?group=${currentGroup}`, {
+        const response = await fetch(`/api/import-excel?group=${currentGroup}`
+            , {
             method: 'POST',
             body: formData
         });
