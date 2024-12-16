@@ -394,14 +394,15 @@ def get_column_letter(n):
 @app.route('/api/export-excel', methods=['POST'])
 def export_excel():
     try:
-        wb = Workbook()
-        
-        # Get current month data from sala group (primary group)
+        # Check if there's an active schedule
         primary_scheduler = schedulers['sala']
-        if not hasattr(primary_scheduler, 'year') or not hasattr(primary_scheduler, 'month'):
-            # Initialize with current date if no month is set
-            current_date = datetime.now()
-            primary_scheduler.initialize_month(current_date.year, current_date.month)
+        if not hasattr(primary_scheduler, 'month') or not primary_scheduler.schedule:
+            return jsonify({
+                'success': False,
+                'error': 'No active schedule to export. Please generate or load a schedule first.'
+            }), 400
+            
+        wb = Workbook()
         year = primary_scheduler.year
         month = primary_scheduler.month
         month_names = ["January", "February", "March", "April", "May", "June",
