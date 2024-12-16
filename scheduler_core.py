@@ -505,66 +505,7 @@ class SchedulerCore:
                         else:
                             self.assign_shift(day, "Marianella", "M")
     
-    def save_last_session(self):
-        """Save current state to a JSON file"""
-        session_data = {
-            'current_group': self.current_group,
-            'year': getattr(self, 'year', None),
-            'month': getattr(self, 'month', None),
-            'days_in_month': getattr(self, 'days_in_month', None),
-            'preview_days': getattr(self, 'preview_days', None),
-            'schedule': self.schedule,
-            'total_hours': self.total_hours
-        }
-        
-        # Convert tuple keys to strings for JSON serialization
-        schedule_dict = {}
-        for key, value in self.schedule.items():
-            schedule_dict[f"{key[0]},{key[1]}"] = value
-            
-        session_data['schedule'] = schedule_dict
-        
-        # Save to file with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'autosave/last_session_{self.current_group}.json'
-        
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(session_data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Error saving session: {e}")
-
-    def load_last_session(self):
-        """Load last saved session if it exists"""
-        filename = f'autosave/last_session_{self.current_group}.json'
-        
-        if not os.path.exists(filename):
-            return
-            
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                session_data = json.load(f)
-                
-            # Restore simple attributes
-            self.current_group = session_data['current_group']
-            if session_data['year'] and session_data['month']:
-                self.year = session_data['year']
-                self.month = session_data['month']
-                self.days_in_month = session_data['days_in_month']
-                self.preview_days = session_data['preview_days']
-            
-            # Restore schedule (converting string keys back to tuples)
-            self.schedule = {}
-            for key_str, value in session_data['schedule'].items():
-                worker_idx, day = map(int, key_str.split(','))
-                self.schedule[(worker_idx, day)] = value
-                
-            # Restore total hours
-            self.total_hours = session_data['total_hours']
-            
-        except Exception as e:
-            print(f"Error loading session: {e}")
-    
+          
     def clear_schedule(self):
         """Clear the entire schedule"""
         self.schedule.clear()
