@@ -394,14 +394,21 @@ def get_column_letter(n):
 @app.route('/api/export-excel', methods=['POST'])
 def export_excel():
     try:
-        # Check if there's an active schedule
+        # Debug logging
         primary_scheduler = schedulers['sala']
-        if not hasattr(primary_scheduler, 'month') or not primary_scheduler.schedule:
-            return jsonify({
-                'success': False,
-                'error': 'No active schedule to export. Please generate or load a schedule first.'
-            }), 400
-            
+        print("Debug - scheduler attributes:")
+        print(f"Has year: {hasattr(primary_scheduler, 'year')}")
+        print(f"Has month: {hasattr(primary_scheduler, 'month')}")
+        print(f"Has days_in_month: {hasattr(primary_scheduler, 'days_in_month')}")
+        print(f"Schedule empty?: {not primary_scheduler.schedule}")
+        print(f"Current group: {primary_scheduler.current_group}")
+
+        # Initialize if needed
+        if not hasattr(primary_scheduler, 'days_in_month'):
+            current_date = datetime.now()
+            primary_scheduler.initialize_month(current_date.year, current_date.month)
+            print(f"Initialized with {current_date.year}/{current_date.month}")
+
         wb = Workbook()
         year = primary_scheduler.year
         month = primary_scheduler.month
