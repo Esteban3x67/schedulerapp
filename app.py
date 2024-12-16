@@ -403,15 +403,17 @@ def export_excel():
         print(f"Schedule empty?: {not primary_scheduler.schedule}")
         print(f"Current group: {primary_scheduler.current_group}")
 
-        # Initialize if needed
-        if not hasattr(primary_scheduler, 'days_in_month'):
-            current_date = datetime.now()
-            primary_scheduler.initialize_month(current_date.year, current_date.month)
-            print(f"Initialized with {current_date.year}/{current_date.month}")
-
-        wb = Workbook()
+        # Initialize all schedulers with the same month/year
         year = primary_scheduler.year
         month = primary_scheduler.month
+        
+        for group_name in ['sala', 'cocina', 'coperia']:
+            if not hasattr(schedulers[group_name], 'days_in_month'):
+                print(f"Initializing {group_name} scheduler")
+                schedulers[group_name].initialize_month(year, month)
+                schedulers[group_name].set_current_group(group_name)
+
+        wb = Workbook()
         month_names = ["January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December"]
         
