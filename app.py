@@ -398,6 +398,10 @@ def export_excel():
         
         # Get current month data from sala group (primary group)
         primary_scheduler = schedulers['sala']
+        if not hasattr(primary_scheduler, 'year') or not hasattr(primary_scheduler, 'month'):
+            # Initialize with current date if no month is set
+            current_date = datetime.now()
+            primary_scheduler.initialize_month(current_date.year, current_date.month)
         year = primary_scheduler.year
         month = primary_scheduler.month
         month_names = ["January", "February", "March", "April", "May", "June",
