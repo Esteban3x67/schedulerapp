@@ -145,6 +145,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add this line to the existing event listeners section in DOMContentLoaded
     document.getElementById('manageWorkersBtn').addEventListener('click', showModal);
 
+    document.getElementById('addWorkerBtn').addEventListener('click', () => manageWorker('add'));
+    document.getElementById('removeWorkerBtn').addEventListener('click', () => manageWorker('remove'));
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+
     // Worker Management Functions
     async function manageWorker(action) {
         const password = document.getElementById('managerPassword').value;
@@ -202,8 +206,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('workerType').value = 'full';
     }
 
-    const addWorker = () => manageWorker('add');
-    const removeWorker = () => manageWorker('remove');
 
 }); // This is the end of DOMContentLoaded
 async function generateSchedule() {
@@ -1075,7 +1077,7 @@ async function completeGenerate() {
 // Update the existing updateDLVerification function to use the new endpoint
 async function updateDLVerification() {
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
+        const response = await fetch('/api/verify-dl-counts');
         const data = await response.json();
         
         if (data.success) {
