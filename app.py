@@ -14,6 +14,9 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 import sys
+from functools import wraps
+from werkzeug.security import check_password_hash, generate_password_hash
+import json
 
 # Create necessary directories if they don't exist
 if not os.path.exists('autosave'):
@@ -70,6 +73,83 @@ GROUP_NAMES = {
     'cocina': 'Cocina',
     'coperia': 'Copería'
 }
+# Store hashed password - CHANGE THIS PASSWORD!
+MANAGER_PASSWORD_HASH = generate_password_hash('vip123')
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No authorization provided'}), 401
+        password = auth_header.split('Basic ')[-1]
+        if not check_password_hash(MANAGER_PASSWORD_HASH, password):
+            return jsonify({'error': 'Invalid password'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+def save_staff_config():
+    """Save staff configuration to file"""
+    config = {}
+    for group in schedulers:
+        config[group] = schedulers[group].staff_groups[group]
+    
+    with open('staff_config.json', 'w') as f:
+        json.dump(config, f, indent=2)
+
+def load_staff_config():
+    """Load staff configuration from file"""
+    try:
+        with open('staff_config.json', 'r') as f:
+            config = json.load(f)
+            for group in schedulers:
+                if group in config:
+                    schedulers[group].staff_groups[group] = config[group]
+    except FileNotFoundError:
+        pass  # Use default configuration if file doesn't exist
+
+# Add new route for worker management
+@app.route('/api/workers/manage', methods=['POST'])
+@requires_auth
+def manage_workers():
+    """Add, remove, or modify workers"""
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        group = data.get('group')
+        worker = data.get('worker')
+        is_full_time = data.get('is_full_time', True)
+        
+        if group not in schedulers:
+            return jsonify({'success': False, 'error': 'Invalid group'})
+            
+        scheduler = schedulers[group]
+        
+        if action == 'add':
+            if is_full_time:
+                if worker not in scheduler.staff_groups[group]['workers_full_time']:
+                    scheduler.staff_groups[group]['workers_full_time'].append(worker)
+            else:
+                if worker not in scheduler.staff_groups[group]['workers_part_time']:
+                    scheduler.staff_groups[group]['workers_part_time'].append(worker)
+        elif action == 'remove':
+            if worker in scheduler.staff_groups[group]['workers_full_time']:
+                scheduler.staff_groups[group]['workers_full_time'].remove(worker)
+            if worker in scheduler.staff_groups[group]['workers_part_time']:
+                scheduler.staff_groups[group]['workers_part_time'].remove(worker)
+        
+        # Update selected workers
+        scheduler.selected_workers = (
+            scheduler.staff_groups[group]['workers_full_time'] +
+            scheduler.staff_groups[group]['workers_part_time']
+        )
+        
+        # Save changes to file
+        save_staff_config()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/')
 def index():

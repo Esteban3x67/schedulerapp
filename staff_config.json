@@ -1,0 +1,30 @@
+{
+    "sala": {
+        "name": "Personal de Sala",
+        "workers_full_time": [
+            "Alejandrina", "Isabel", "Paulina", "Yuli", "Camila", "Javier",
+            "Natalia", "Fiorella", "Martina", "Felipe", "Javiera", "Marianella", "Krishna"
+        ],
+        "workers_part_time": [
+            "Anais", "Diego Cisterna", "Diego Nuñez", "Jennifer", "Joaquin"
+        ],
+        "special_rules": ["marianella_javiera"]
+    },
+    "coperia": {
+        "name": "Copería",
+        "workers_full_time": [
+            "Eric", "Soledad", "Ester", "Kelly", "Marthita"
+        ],
+        "workers_part_time": [],
+        "special_rules": []
+    },
+    "cocina": {
+        "name": "Cocina",
+        "workers_full_time": [
+            "Soledad", "Gonzalo", "Christopher", "Ahyran", 
+            "Dominique", "Carolina", "Donkan"
+        ],
+        "workers_part_time": [],
+        "special_rules": []
+    }
+}

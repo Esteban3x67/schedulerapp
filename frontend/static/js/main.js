@@ -141,7 +141,71 @@ document.addEventListener('DOMContentLoaded', () => {
     completeBtn.parentNode.insertBefore(exportBtn, completeBtn.nextSibling);
     completeBtn.parentNode.insertBefore(importBtn, exportBtn.nextSibling);
     completeBtn.parentNode.insertBefore(fileInput, importBtn.nextSibling);
-});
+
+    // Add this line to the existing event listeners section in DOMContentLoaded
+    document.getElementById('manageWorkersBtn').addEventListener('click', showModal);
+
+    // Worker Management Functions
+    async function manageWorker(action) {
+        const password = document.getElementById('managerPassword').value;
+        const worker = document.getElementById('workerName').value;
+        const isFullTime = document.getElementById('workerType').value === 'full';
+        
+        if (!worker) {
+            alert('Please enter a worker name');
+            return;
+        }
+        
+        if (!password) {
+            alert('Please enter the manager password');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/workers/manage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Basic ${password}`
+                },
+                body: JSON.stringify({
+                    action,
+                    group: currentGroup,
+                    worker,
+                    is_full_time: isFullTime
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                alert(`Worker successfully ${action}ed`);
+                closeModal();
+                // Regenerate schedule to reflect changes
+                await generateSchedule();
+            } else {
+                alert(data.error || 'Operation failed');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to manage worker');
+        }
+    }
+
+    function showModal() {
+        document.getElementById('workerManagementModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+        document.getElementById('workerManagementModal').classList.add('hidden');
+        document.getElementById('managerPassword').value = '';
+        document.getElementById('workerName').value = '';
+        document.getElementById('workerType').value = 'full';
+    }
+
+    const addWorker = () => manageWorker('add');
+    const removeWorker = () => manageWorker('remove');
+
+}); // This is the end of DOMContentLoaded
 async function generateSchedule() {
     const month = document.getElementById('monthSelect').value;
     const year = document.getElementById('yearSelect').value;
