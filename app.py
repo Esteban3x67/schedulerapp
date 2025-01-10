@@ -476,15 +476,40 @@ def get_column_letter(n):
 @app.route('/api/export-excel', methods=['POST'])
 def export_excel():
     try:
-        wb = Workbook()
-        
-        # Get current month data from sala group (primary group)
+        # Debug logging
         primary_scheduler = schedulers['sala']
+        print("Debug - scheduler attributes:")
+        print(f"Has year: {hasattr(primary_scheduler, 'year')}")
+        print(f"Has month: {hasattr(primary_scheduler, 'month')}")
+        
+        # Safety check for year and month
+        if not hasattr(primary_scheduler, 'year') or not hasattr(primary_scheduler, 'month'):
+            return jsonify({
+                'success': False,
+                'error': 'Please generate or load a schedule first'
+            }), 400
+            
+        # Get year and month safely
         year = primary_scheduler.year
         month = primary_scheduler.month
+        
+        if year is None or month is None:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid year or month. Please generate a schedule first.'
+            }), 400
+
+        # Initialize all schedulers with the same month/year
+        for group_name in ['sala', 'cocina', 'coperia']:
+            scheduler = schedulers[group_name]
+            if not hasattr(scheduler, 'days_in_month') or scheduler.days_in_month is None:
+                scheduler.initialize_month(year, month)
+                scheduler.set_current_group(group_name)
+
+        wb = Workbook()
         month_names = ["January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December"]
-        
+                
         # Create worksheets for each group
         for group_name in ['sala', 'cocina', 'coperia']:
             scheduler = schedulers[group_name]
