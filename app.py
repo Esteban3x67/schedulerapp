@@ -663,6 +663,25 @@ def export_excel():
             'error': str(e)
         }), 500
 
+def process_worker_list(worksheet_name, ws, scheduler):
+    """Process workers from Excel and merge with existing configuration"""
+    processed_workers = set()
+    
+    # Start from row 4 (after headers) until we hit counter rows
+    for row in range(4, ws.max_row + 1):
+        worker_name = ws.cell(row=row, column=1).value
+        if not worker_name or worker_name in ['Morning:', 'Afternoon:', 'Night:']:
+            break
+            
+        processed_workers.add(worker_name)
+        
+        # If worker isn't in either list, add them as full-time
+        if (worker_name not in scheduler.staff_groups[scheduler.current_group]['workers_full_time'] and 
+            worker_name not in scheduler.staff_groups[scheduler.current_group]['workers_part_time']):
+            scheduler.add_worker(worker_name, is_full_time=True)
+    
+    return processed_workers
+
 @app.route('/api/import-excel', methods=['POST'])
 def import_excel():
     try:
@@ -678,7 +697,6 @@ def import_excel():
         
         result_data = {}
         
-        print("\nStarting Excel import...")
         # Process each worksheet (group)
         for group_name in ['sala', 'cocina', 'coperia']:
             print(f"\nProcessing group: {group_name}")
@@ -691,7 +709,7 @@ def import_excel():
                 ws = wb[worksheet_name]
                 print(f"Successfully found worksheet: {worksheet_name}")
                 
-                # Extract month and year from title first
+                # Extract month and year from title
                 title = ws['A1'].value
                 month_year = title.split()
                 month = month_year[0]
@@ -702,50 +720,31 @@ def import_excel():
                               "July", "August", "September", "October", "November", "December"]
                 month_num = month_names.index(month) + 1
                 
-                # Print first few cells to verify content
-                for row in range(4, 7):  # Print first few workers
-                    worker_name = ws.cell(row=row, column=1).value
-                    first_shifts = [ws.cell(row=row, column=col).value for col in range(2, 6)]
-                    print(f"Worker: {worker_name}, First shifts: {first_shifts}")
-
-                # Initialize scheduler with extracted month/year
+                # Initialize scheduler
                 scheduler = schedulers[group_name]
                 scheduler.initialize_month(year, month_num)
                 scheduler.set_current_group(group_name)
                 
-                # Get the separator column position (where '║' is)
-                separator_col = None
-                for col in range(1, ws.max_column + 1):
-                    if ws.cell(row=2, column=col).value == '║':
-                        separator_col = col
-                        break
+                # Process workers and merge with existing configuration
+                processed_workers = process_worker_list(worksheet_name, ws, scheduler)
                 
-                # Read schedule data
-                for row in range(4, ws.max_row + 1):
-                    worker_name = ws.cell(row=row, column=1).value
-                    if not worker_name or worker_name in ['Morning:', 'Afternoon:', 'Night:']:
-                        break
+                # Save updated configuration
+                scheduler.save_staff_config()
+                
+                # Read schedule data as before
+                print(f"Reading schedule for {len(scheduler.selected_workers)} workers")
+                for worker_index, worker in enumerate(scheduler.selected_workers):
+                    if worker not in processed_workers:
+                        continue  # Skip workers not in the Excel file
                         
-                    if worker_name not in scheduler.selected_workers:
-                        continue
-                        
-                    # Read main month shifts
+                    print(f"Processing worker: {worker}")
                     for day in range(1, scheduler.days_in_month + 1):
                         col = day + 1  # +1 because first column is worker names
-                        cell_value = ws.cell(row=row, column=col).value
+                        cell_value = ws.cell(row=worker_index + 4, column=col).value
                         if cell_value:
-                            scheduler.assign_shift(day, worker_name, cell_value)
-                    
-                    # Read preview days
-                    if separator_col:
-                        for day in range(1, 8):  # 7 preview days
-                            preview_col = separator_col + day
-                            cell_value = ws.cell(row=row, column=preview_col).value
-                            if cell_value and isinstance(cell_value, str):
-                                actual_day = scheduler.days_in_month + day
-                                scheduler.assign_shift(actual_day, worker_name, cell_value)
+                            scheduler.assign_shift(day, worker, cell_value)
                 
-                # Store result for this group
+                # Store result
                 result_data[group_name] = {
                     'schedule': scheduler.get_month_schedule(),
                     'month_data': {
@@ -755,11 +754,6 @@ def import_excel():
                         'preview_days': 7
                     }
                 }
-                print(f"Stored schedule for {group_name}:")  # Debug print
-                # Print first worker's shifts
-                if scheduler.get_month_schedule():
-                    first_worker = scheduler.get_month_schedule()[0]
-                    print(f"First worker: {first_worker['name']}, first shifts: {[first_worker['shifts'].get(d) for d in range(1,5)]}")
                 
             except Exception as e:
                 print(f"Error with worksheet {worksheet_name}: {str(e)}")
@@ -776,8 +770,7 @@ def import_excel():
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500
-    
+        }), 500    
 @app.route('/api/load-session', methods=['POST'])
 def load_session():
     """Load last saved session"""
