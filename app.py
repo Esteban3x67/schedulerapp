@@ -124,33 +124,35 @@ def manage_workers():
             return jsonify({'success': False, 'error': 'Invalid group'})
             
         scheduler = schedulers[group]
+        success = False
         
         if action == 'add':
-            if is_full_time:
-                if worker not in scheduler.staff_groups[group]['workers_full_time']:
-                    scheduler.staff_groups[group]['workers_full_time'].append(worker)
-            else:
-                if worker not in scheduler.staff_groups[group]['workers_part_time']:
-                    scheduler.staff_groups[group]['workers_part_time'].append(worker)
+            success = scheduler.add_worker(worker, is_full_time)
+            if not success:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Worker already exists or invalid input'
+                })
         elif action == 'remove':
-            if worker in scheduler.staff_groups[group]['workers_full_time']:
-                scheduler.staff_groups[group]['workers_full_time'].remove(worker)
-            if worker in scheduler.staff_groups[group]['workers_part_time']:
-                scheduler.staff_groups[group]['workers_part_time'].remove(worker)
+            success = scheduler.remove_worker(worker)
+            if not success:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Worker not found'
+                })
         
-        # Update selected workers
-        scheduler.selected_workers = (
-            scheduler.staff_groups[group]['workers_full_time'] +
-            scheduler.staff_groups[group]['workers_part_time']
-        )
+        # Return updated worker list along with success status
+        return jsonify({
+            'success': True,
+            'workers': scheduler.selected_workers
+        })
         
-        # Save changes to file
-        save_staff_config()
-        
-        return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
+        return jsonify({
+            'success': False, 
+            'error': str(e)
+        })
+    
 @app.route('/')
 def index():
     """Show the main page"""
