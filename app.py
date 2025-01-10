@@ -476,26 +476,12 @@ def get_column_letter(n):
 @app.route('/api/export-excel', methods=['POST'])
 def export_excel():
     try:
-        # Debug logging
+        wb = Workbook()
+        
+        # Get current month data from sala group (primary group)
         primary_scheduler = schedulers['sala']
-        print("Debug - scheduler attributes:")
-        print(f"Has year: {hasattr(primary_scheduler, 'year')}")
-        print(f"Has month: {hasattr(primary_scheduler, 'month')}")
-        print(f"Has days_in_month: {hasattr(primary_scheduler, 'days_in_month')}")
-        print(f"Schedule empty?: {not primary_scheduler.schedule}")
-        print(f"Current group: {primary_scheduler.current_group}")
-
-        # Initialize all schedulers with the same month/year
         year = primary_scheduler.year
         month = primary_scheduler.month
-        
-        for group_name in ['sala', 'cocina', 'coperia']:
-            if not hasattr(schedulers[group_name], 'days_in_month'):
-                print(f"Initializing {group_name} scheduler")
-                schedulers[group_name].initialize_month(year, month)
-                schedulers[group_name].set_current_group(group_name)
-
-        wb = Workbook()
         month_names = ["January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December"]
         
@@ -773,6 +759,7 @@ def import_excel():
         }), 500    
 @app.route('/api/load-session', methods=['POST'])
 def load_session():
+
     """Load last saved session"""
     try:
         group = request.get_json().get('group', 'sala')
