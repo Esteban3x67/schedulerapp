@@ -3,18 +3,19 @@ import random
 from datetime import datetime, timedelta
 import json
 import os
+from datetime import datetime
 
 class SchedulerCore:
     def __init__(self):
-        # Define default staff groups
-        self.default_staff_groups = {
+        # Define all staff groups
+        self.staff_groups = {
             'sala': {
                 'name': 'Personal de Sala',
-                'workers_full_time': [
+                'workers_full_time': [  # Regular full-time workers
                     "Alejandrina", "Isabel", "Paulina", "Yuli", "Camila", "Javier",
                     "Natalia", "Fiorella", "Martina", "Felipe", "Javiera", "Marianella", "Krishna"
                 ],
-                'workers_part_time': [
+                'workers_part_time': [  # Part-time workers
                     "Anais", "Diego Cisterna", "Diego Nuñez", "Jennifer", "Joaquin"
                 ],
                 'special_rules': ['marianella_javiera']
@@ -38,17 +39,6 @@ class SchedulerCore:
             }
         }
         
-        # Create config directory if it doesn't exist
-        if not os.path.exists('config'):
-            os.makedirs('config')
-            
-        # Load or initialize staff configuration
-        self.staff_groups = self.load_staff_config()
-        
-        # Start with sala as default
-        self.current_group = 'sala'
-        # Initialize selected workers
-        self.update_selected_workers()        
         # Start with sala as default
         self.current_group = 'sala'
         # Combine full-time and part-time workers, maintaining order
@@ -61,20 +51,13 @@ class SchedulerCore:
         self.schedule = {}  # Format: {(worker_index, day): shift_type}
         self.total_hours = {}
 
-        # Initialize month-related attributes
-        self.year = None
-        self.month = None
-        self.days_in_month = None
-        self.preview_days = None
-    
-            # Create autosave directory if it doesn't exist
+        # Create autosave directory if it doesn't exist
         if not os.path.exists('autosave'):
             os.makedirs('autosave')
         
+        # Try to load last session on initialization
         self.load_last_session()
 
-
-       
     def set_current_group(self, group):
         """Switch to a different staff group"""
         if group in self.staff_groups:
@@ -96,76 +79,6 @@ class SchedulerCore:
         """Check if current group has a specific special rule"""
         return rule in self.staff_groups[self.current_group]['special_rules']
         
-    def load_staff_config(self):
-        """Load staff configuration from file or return defaults if file doesn't exist"""
-        config_path = 'config/staff_config.json'
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            # If file doesn't exist, save and return defaults
-            self.save_staff_config(self.default_staff_groups)
-            return self.default_staff_groups
-
-    def save_staff_config(self, config=None):
-        """Save current staff configuration to file"""
-        if config is None:
-            config = self.staff_groups
-        config_path = 'config/staff_config.json'
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-
-    def update_selected_workers(self):
-        """Update selected workers list based on current group"""
-        if self.current_group in self.staff_groups:
-            self.selected_workers = (
-                self.staff_groups[self.current_group]['workers_full_time'] +
-                self.staff_groups[self.current_group]['workers_part_time']
-            )
-
-    def add_worker(self, worker_name, is_full_time=True, group=None):
-        """Add a worker to the specified group"""
-        if group is None:
-            group = self.current_group
-            
-        if group not in self.staff_groups:
-            return False
-            
-        worker_list = 'workers_full_time' if is_full_time else 'workers_part_time'
-        
-        # Check if worker already exists in either list
-        if (worker_name in self.staff_groups[group]['workers_full_time'] or
-            worker_name in self.staff_groups[group]['workers_part_time']):
-            return False
-            
-        self.staff_groups[group][worker_list].append(worker_name)
-        self.save_staff_config()
-        self.update_selected_workers()
-        return True
-
-    def remove_worker(self, worker_name, group=None):
-        """Remove a worker from the specified group"""
-        if group is None:
-            group = self.current_group
-            
-        if group not in self.staff_groups:
-            return False
-            
-        # Try to remove from both full-time and part-time lists
-        try:
-            self.staff_groups[group]['workers_full_time'].remove(worker_name)
-            self.save_staff_config()
-            self.update_selected_workers()
-            return True
-        except ValueError:
-            try:
-                self.staff_groups[group]['workers_part_time'].remove(worker_name)
-                self.save_staff_config()
-                self.update_selected_workers()
-                return True
-            except ValueError:
-                return False
-    
     def initialize_month(self, year, month):
         """Initialize empty schedule for given month"""
         self.year = year
@@ -184,7 +97,7 @@ class SchedulerCore:
         worker_index = self.selected_workers.index(worker)
         self.schedule[(worker_index, day)] = shift_type
         self.update_total_hours()
-        self.save_last_session() 
+        
 
     def clear_shift(self, day, worker):
         """Clear a shift assignment"""
@@ -192,7 +105,6 @@ class SchedulerCore:
         if (worker_index, day) in self.schedule:
             del self.schedule[(worker_index, day)]
         self.update_total_hours()
-        self.save_last_session()
     
     def update_total_hours(self):
         """Calculate total hours for each worker"""
@@ -591,13 +503,10 @@ class SchedulerCore:
                             self.assign_shift(day, "Marianella", "T")
                         else:
                             self.assign_shift(day, "Marianella", "M")
-    
-          
     def clear_schedule(self):
         """Clear the entire schedule"""
         self.schedule.clear()
         self.total_hours.clear()
-        self.save_last_session()
 
     def can_place_l_here(self, worker_index, day):
         """Check if an L day can be placed on this day"""
@@ -628,61 +537,6 @@ class SchedulerCore:
                     worker_schedule['shifts'][day] = shift
             schedule_data.append(worker_schedule)
         return schedule_data
-    
-    def save_last_session(self):
-        """Save current state to a JSON file"""
-        session_data = {
-            'current_group': self.current_group,
-            'year': getattr(self, 'year', None),
-            'month': getattr(self, 'month', None),
-            'days_in_month': getattr(self, 'days_in_month', None),
-            'preview_days': getattr(self, 'preview_days', None),
-            'total_hours': self.total_hours
-        }
-        
-        # Convert tuple keys to strings for JSON serialization
-        schedule_dict = {}
-        for key, value in self.schedule.items():
-            schedule_dict[f"{key[0]},{key[1]}"] = value
-        session_data['schedule'] = schedule_dict
-        
-        filename = f'autosave/last_session_{self.current_group}.json'
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(session_data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Error saving session: {e}")
-
-    def load_last_session(self):
-        """Load last saved session if it exists"""
-        filename = f'autosave/last_session_{self.current_group}.json'
-        
-        if not os.path.exists(filename):
-            return
-            
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                session_data = json.load(f)
-                
-            # Restore simple attributes
-            self.current_group = session_data['current_group']
-            if session_data['year'] and session_data['month']:
-                self.year = session_data['year']
-                self.month = session_data['month']
-                self.days_in_month = session_data['days_in_month']
-                self.preview_days = session_data['preview_days']
-            
-            # Restore schedule (converting string keys back to tuples)
-            self.schedule = {}
-            for key_str, value in session_data['schedule'].items():
-                worker_idx, day = map(int, key_str.split(','))
-                self.schedule[(worker_idx, day)] = value
-                
-            # Restore total hours
-            self.total_hours = session_data['total_hours']
-            
-        except Exception as e:
-            print(f"Error loading session: {e}")
 
     def transfer_to_next_month(self):
         """Transfer preview data to next month ONLY"""

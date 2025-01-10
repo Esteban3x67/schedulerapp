@@ -1,86 +1,11 @@
 // Global variables
-let scheduleState = {
-    'sala': null,
-    'cocina': null,
-    'coperia': null
-};
-let currentGroup = 'sala';
+let currentShift = null;
 let isSelecting = false;
 let selectedCells = new Set();
 let currentSchedule = null;
-let currentShift = null;
-
-// Constants for group management
-const GROUPS = {
-    SALA: 'sala',
-    COCINA: 'cocina',
-    COPERIA: 'coperia'
-};
-
-const GROUP_NAMES = {
-    [GROUPS.SALA]: 'Personal de Sala',
-    [GROUPS.COCINA]: 'Cocina',
-    [GROUPS.COPERIA]: 'Copería'
-};
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    // Add group selector
-    const groupSelect = document.createElement('select');
-    groupSelect.id = 'groupSelect';
-    groupSelect.className = 'p-2 border rounded mr-4';
-    
-    Object.entries(GROUP_NAMES).forEach(([value, name]) => {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = name;
-        groupSelect.appendChild(option);
-    });
-
-    document.getElementById('loadSessionBtn').addEventListener('click', async () => {
-        try {
-            const response = await fetch('/api/load-session'
-
-                , {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ 
-                    group: currentGroup 
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                // Update the UI controls to match loaded data
-                document.getElementById('monthSelect').value = data.month_data.month.toString();
-                document.getElementById('yearSelect').value = data.month_data.year.toString();
-                
-                // Display the schedule
-                displaySchedule(data.schedule, data.month_data);
-                
-                // Update stored state
-                scheduleState[currentGroup] = {
-                    schedule: data.schedule,
-                    month: data.month_data.month.toString(),
-                    year: data.month_data.year.toString()
-                };
-            } else {
-                alert('Failed to load session: ' + data.error);
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Failed to load session. Please check the console for details.');
-        }
-    });
-    // Insert before month select
-    const monthSelect = document.getElementById('monthSelect');
-    monthSelect.parentNode.insertBefore(groupSelect, monthSelect);
-    
-    // Add event listener for group changes
-    groupSelect.addEventListener('change', handleGroupChange);
     // Add event listeners
     document.getElementById('generateBtn').addEventListener('click', generateSchedule);
     document.getElementById('transferBtn').addEventListener('click', transferPreview);
@@ -141,87 +66,20 @@ document.addEventListener('DOMContentLoaded', () => {
     completeBtn.parentNode.insertBefore(exportBtn, completeBtn.nextSibling);
     completeBtn.parentNode.insertBefore(importBtn, exportBtn.nextSibling);
     completeBtn.parentNode.insertBefore(fileInput, importBtn.nextSibling);
-
-    // Add this line to the existing event listeners section in DOMContentLoaded
-    document.getElementById('manageWorkersBtn').addEventListener('click', showModal);
-
-    document.getElementById('addWorkerBtn').addEventListener('click', () => manageWorker('add'));
-    document.getElementById('removeWorkerBtn').addEventListener('click', () => manageWorker('remove'));
-    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
-
-    // Worker Management Functions
-    async function manageWorker(action) {
-        const password = document.getElementById('managerPassword').value;
-        const worker = document.getElementById('workerName').value;
-        const isFullTime = document.getElementById('workerType').value === 'full';
-        
-        if (!worker) {
-            alert('Please enter a worker name');
-            return;
-        }
-        
-        if (!password) {
-            alert('Please enter the manager password');
-            return;
-        }
-        
-        try {
-            const response = await fetch('/api/workers/manage', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Basic ${password}`
-                },
-                body: JSON.stringify({
-                    action,
-                    group: currentGroup,
-                    worker,
-                    is_full_time: isFullTime
-                })
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                alert(`Worker successfully ${action}ed`);
-                closeModal();
-                // Regenerate schedule to reflect changes
-                await generateSchedule();
-            } else {
-                alert(data.error || 'Operation failed');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Failed to manage worker');
-        }
-    }
-
-    function showModal() {
-        document.getElementById('workerManagementModal').classList.remove('hidden');
-    }
-
-    function closeModal() {
-        document.getElementById('workerManagementModal').classList.add('hidden');
-        document.getElementById('managerPassword').value = '';
-        document.getElementById('workerName').value = '';
-        document.getElementById('workerType').value = 'full';
-    }
-
-
-}); // This is the end of DOMContentLoaded
+});
 async function generateSchedule() {
     const month = document.getElementById('monthSelect').value;
     const year = document.getElementById('yearSelect').value;
     
     try {
-        const response = await fetch('api/generate', {
+        const response = await fetch('http://127.0.0.1:5000/api/generate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ 
                 month: parseInt(month), 
-                year: parseInt(year),
-                group: currentGroup
+                year: parseInt(year) 
             })
         });
         
@@ -229,15 +87,11 @@ async function generateSchedule() {
         
         if (data.success) {
             displaySchedule(data.schedule, data.month_data);
-            scheduleState[currentGroup] = {
-                schedule: data.schedule,
-                month: month,
-                year: year
-            };
             updateConsecutiveDays();
             
+            // Add these new lines here
             try {
-                const verifyResponse = await fetch(`/api/verify-schedule?group=${currentGroup}`);
+                const verifyResponse = await fetch('http://127.0.0.1:5000/api/verify-schedule');
                 const verifyData = await verifyResponse.json();
                 if (verifyData.total_violations > 0) {
                     console.error('Schedule violations found:', verifyData.violations);
@@ -245,6 +99,8 @@ async function generateSchedule() {
             } catch (error) {
                 console.error('Error verifying schedule:', error);
             }
+            // End of new lines
+            
         } else {
             alert('Failed to generate schedule: ' + data.error);
         }
@@ -647,14 +503,12 @@ function updateShiftCounters() {
 }
 async function updateShift(worker, day, shift) {
     try {
-        const response = await fetch('/api/update-shift'
-
-            , {
+        const response = await fetch('http://127.0.0.1:5000/api/update-shift', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ worker, day, shift, group: currentGroup })
+            body: JSON.stringify({ worker, day, shift })
         });
         
         const data = await response.json();  
@@ -679,12 +533,10 @@ async function updateShift(worker, day, shift) {
             updateHourCount(worker);  
             updateShiftCounters();    
             updateConsecutiveDays();
-            updateWarnings(); // Add this line to update warnings whenever any shift changes
-
             
             // Only verify DLs if we're adding/removing a DL
             if (shift === 'DL' || oldShift === 'DL') {
-                const dlResponse = await fetch(`/api/verify-dl-counts?group=${currentGroup}`);
+                const dlResponse = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
                 const dlData = await dlResponse.json();
                 if (dlData.success) {
                     console.log('DL Status data:', dlData.dl_status);  // Debug log
@@ -718,23 +570,12 @@ async function updateShift(worker, day, shift) {
                     updateWarnings();
                 }
             }
-            
-            // Update stored state after all changes
-            scheduleState[currentGroup] = {
-                schedule: currentSchedule,
-                month: document.getElementById('monthSelect').value,
-                year: document.getElementById('yearSelect').value
-            };
-            
-            return true;
         } else {
             alert(data.error || 'Failed to update shift');
-            return false;
         }
     } catch (error) {
         console.error('Error:', error);
         alert('Failed to update shift. Please check the console for details.');
-        return false;
     }
 }
 // Helper function to update DL status for a single worker
@@ -986,14 +827,11 @@ function getDLCount(worker) {
 }
 async function transferPreview() {
     try {
-        const response = await fetch('/api/transfer', {
+        const response = await fetch('http://127.0.0.1:5000/api/transfer', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                group: currentGroup 
-            })
+            }
         });
         
         const data = await response.json();
@@ -1011,13 +849,6 @@ async function transferPreview() {
             monthSelect.value = newMonth.toString();
             
             displaySchedule(data.schedule, data.month_data);
-            
-            // Update the stored state
-            scheduleState[currentGroup] = {
-                schedule: data.schedule,
-                month: newMonth.toString(),
-                year: document.getElementById('yearSelect').value
-            };
         } else {
             alert('Failed to transfer preview: ' + data.error);
         }
@@ -1028,39 +859,31 @@ async function transferPreview() {
 }
 async function completeGenerate() {
     try {
-        const response = await fetch('/api/complete-generate'
-
-            , {
+        const response = await fetch('http://127.0.0.1:5000/api/complete-generate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                group: currentGroup 
-            })
+            }
         });
         
         const data = await response.json();
         
         if (data.success) {
+            // Update the month dropdown to match the new month
+            const monthSelect = document.getElementById('monthSelect');
+            monthSelect.value = data.month_data.month.toString();
+            
             displaySchedule(data.schedule, data.month_data);
             
-            // Update stored state
-            scheduleState[currentGroup] = {
-                schedule: data.schedule,
-                month: data.month_data.month.toString(),
-                year: data.month_data.year.toString()
-            };
-            
             // Rest of your existing verification code
-            const verifyResponse = await fetch('/api/verify-schedule');
+            const verifyResponse = await fetch('http://127.0.0.1:5000/api/verify-schedule');
             const verifyData = await verifyResponse.json();
             if (verifyData.total_violations > 0) {
                 console.error('Schedule violations found:', verifyData.violations);
             }
             
             // Verify DL counts
-            const dlResponse = await fetch('/api/verify-dl-counts');
+            const dlResponse = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
             const dlData = await dlResponse.json();
             if (dlData.success) {
                 updateDLVerification();
@@ -1077,7 +900,7 @@ async function completeGenerate() {
 // Update the existing updateDLVerification function to use the new endpoint
 async function updateDLVerification() {
     try {
-        const response = await fetch('/api/verify-dl-counts');
+        const response = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
         const data = await response.json();
         
         if (data.success) {
@@ -1102,7 +925,7 @@ async function updateDLVerification() {
 }
 async function exportToExcel() {
     try {
-        const response = await fetch('/api/export-excel', {
+        const response = await fetch('http://127.0.0.1:5000/api/export-excel', {
             method: 'POST',
         });
         
@@ -1135,8 +958,7 @@ async function handleFileUpload(event) {
     formData.append('file', file);
 
     try {
-        const response = await fetch(`/api/import-excel?group=${currentGroup}`
-            , {
+        const response = await fetch('http://127.0.0.1:5000/api/import-excel', {
             method: 'POST',
             body: formData
         });
@@ -1144,20 +966,12 @@ async function handleFileUpload(event) {
         const data = await response.json();
         
         if (data.success) {
-            // Store all schedules
-            Object.keys(data.schedules).forEach(group => {
-                scheduleState[group] = {
-                    schedule: data.schedules[group].schedule,
-                    month: data.schedules[group].month_data.month.toString(),
-                    year: data.schedules[group].month_data.year.toString()
-                };
-            });
-
-            // Display current group's schedule
-            const currentGroupData = data.schedules[currentGroup];
-            document.getElementById('monthSelect').value = currentGroupData.month_data.month.toString();
-            document.getElementById('yearSelect').value = currentGroupData.month_data.year.toString();
-            displaySchedule(currentGroupData.schedule, currentGroupData.month_data);
+            // Update month and year dropdowns to match imported schedule
+            document.getElementById('monthSelect').value = data.month_data.month.toString();
+            document.getElementById('yearSelect').value = data.month_data.year.toString();
+            
+            // Display the imported schedule
+            displaySchedule(data.schedule, data.month_data);
             
             // Clear the file input
             event.target.value = '';
@@ -1168,39 +982,4 @@ async function handleFileUpload(event) {
         console.error('Error:', error);
         alert('Failed to import schedule. Please check the console for details.');
     }
-}
-// Handle group changes
-async function handleGroupChange(event) {
-    const newGroup = event.target.value;
-    
-    // Store current schedule state before switching
-    if (currentSchedule) {
-        scheduleState[currentGroup] = {
-            schedule: currentSchedule,
-            month: document.getElementById('monthSelect').value,
-            year: document.getElementById('yearSelect').value
-        };
-    }
-    
-    // Update current group
-    currentGroup = newGroup;
-    
-    // Load stored schedule if exists
-    if (scheduleState[currentGroup]) {
-        const storedState = scheduleState[currentGroup];
-        document.getElementById('monthSelect').value = storedState.month;
-        document.getElementById('yearSelect').value = storedState.year;
-        displaySchedule(storedState.schedule, {
-            month: parseInt(storedState.month),
-            year: parseInt(storedState.year),
-            days_in_month: new Date(storedState.year, storedState.month, 0).getDate(),
-            preview_days: 7
-        });
-    } else {
-        // If no stored schedule, generate a new one
-        await generateSchedule();
-    }
-    
-    // Update warnings
-    updateWarnings();
 }

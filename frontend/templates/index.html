@@ -145,14 +145,6 @@
             <button id="completeBtn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
                 Complete Schedule
             </button>
-            <!-- Load Session Button-->
-            <button id="loadSessionBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                Load Last Session
-            </button>
-            <!-- Manage Workers Button-->
-            <button id="manageWorkersBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                Manage Workers
-            </button>
         </div>
 
         <div class="mb-6 flex flex-wrap gap-2">
@@ -207,26 +199,6 @@
     </div>
 
     <!-- Add our JavaScript -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <!-- Worker Management Modal -->
-<div id="workerManagementModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">    <div class="bg-white p-4 rounded-lg shadow-lg w-96">
-        <h2 class="text-lg font-bold mb-4">Worker Management</h2>
-        <div class="mb-4">
-            <input type="password" id="managerPassword" placeholder="Manager Password" 
-                   class="w-full p-2 border rounded mb-2">
-            <input type="text" id="workerName" placeholder="Worker Name" 
-                   class="w-full p-2 border rounded mb-2">
-            <select id="workerType" class="w-full p-2 border rounded mb-2">
-                <option value="full">Full Time</option>
-                <option value="part">Part Time</option>
-            </select>
-        </div>
-        <div class="flex justify-end gap-2">
-            <button id="addWorkerBtn" class="bg-green-500 text-white px-4 py-2 rounded">Add Worker</button>
-            <button id="removeWorkerBtn" class="bg-red-500 text-white px-4 py-2 rounded">Remove Worker</button>
-            <button id="closeModalBtn" class="bg-gray-500 text-white px-4 py-2 rounded">Close</button>
-        </div>
-    </div>
-</div>
+    <script src="/static/js/main.js"></script>
 </body>
 </html>

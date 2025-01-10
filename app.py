@@ -10,58 +10,12 @@ from flask import send_file
 from openpyxl import load_workbook
 import re
 import unicodedata
-import os
-import logging
-from logging.handlers import RotatingFileHandler
-import sys
-from functools import wraps
-from werkzeug.security import check_password_hash, generate_password_hash
-import json
 
-# Create necessary directories if they don't exist
-if not os.path.exists('autosave'):
-    os.makedirs('autosave')
-if not os.path.exists('logs'):
-    os.makedirs('logs')
-
-print("Step 3: About to configure logging")
-try:
-    # Configure logging but allow Flask output to console
-    logging.basicConfig(
-        handlers=[
-            RotatingFileHandler(
-                'logs/app.log', 
-                maxBytes=100000, 
-                backupCount=3
-            ),
-            logging.StreamHandler(sys.stdout)
-        ],
-        level=logging.INFO,
-        format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
-    )
-    print("Step 4: Logging configured successfully")
-except Exception as e:
-    print("Step 4 ERROR: Logging configuration failed")
-    print(f"Error details: {str(e)}")
-    import traceback
-    print(traceback.format_exc())
-
-print("Step 5: About to create Flask app")
-app = Flask(
-    __name__,
+app = Flask(__name__, 
     template_folder='frontend/templates',
-    static_folder='frontend/static',
-    static_url_path='/static'
+    static_folder='frontend/static'
 )
-print("Step 6: Flask app created")
-
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://scheduler-app-vx70.onrender.com", "http://localhost:5000"],
-        "methods": ["GET", "POST", "OPTIONS"]
-    }
-})
-
+CORS(app)
 schedulers = {
     'sala': SchedulerCore(),
     'cocina': SchedulerCore(),
@@ -73,86 +27,7 @@ GROUP_NAMES = {
     'cocina': 'Cocina',
     'coperia': 'Copería'
 }
-# Store hashed password - CHANGE THIS PASSWORD!
-MANAGER_PASSWORD_HASH = generate_password_hash('vip123')
 
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'error': 'No authorization provided'}), 401
-        password = auth_header.split('Basic ')[-1]
-        if not check_password_hash(MANAGER_PASSWORD_HASH, password):
-            return jsonify({'error': 'Invalid password'}), 401
-        return f(*args, **kwargs)
-    return decorated
-
-def save_staff_config():
-    """Save staff configuration to file"""
-    config = {}
-    for group in schedulers:
-        config[group] = schedulers[group].staff_groups[group]
-    
-    with open('staff_config.json', 'w') as f:
-        json.dump(config, f, indent=2)
-
-def load_staff_config():
-    """Load staff configuration from file"""
-    try:
-        with open('staff_config.json', 'r') as f:
-            config = json.load(f)
-            for group in schedulers:
-                if group in config:
-                    schedulers[group].staff_groups[group] = config[group]
-    except FileNotFoundError:
-        pass  # Use default configuration if file doesn't exist
-
-# Add new route for worker management
-@app.route('/api/workers/manage', methods=['POST'])
-@requires_auth
-def manage_workers():
-    """Add, remove, or modify workers"""
-    try:
-        data = request.get_json()
-        action = data.get('action')
-        group = data.get('group')
-        worker = data.get('worker')
-        is_full_time = data.get('is_full_time', True)
-        
-        if group not in schedulers:
-            return jsonify({'success': False, 'error': 'Invalid group'})
-            
-        scheduler = schedulers[group]
-        success = False
-        
-        if action == 'add':
-            success = scheduler.add_worker(worker, is_full_time)
-            if not success:
-                return jsonify({
-                    'success': False, 
-                    'error': 'Worker already exists or invalid input'
-                })
-        elif action == 'remove':
-            success = scheduler.remove_worker(worker)
-            if not success:
-                return jsonify({
-                    'success': False, 
-                    'error': 'Worker not found'
-                })
-        
-        # Return updated worker list along with success status
-        return jsonify({
-            'success': True,
-            'workers': scheduler.selected_workers
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False, 
-            'error': str(e)
-        })
-    
 @app.route('/')
 def index():
     """Show the main page"""
@@ -176,9 +51,7 @@ def get_workers():
 def generate():
     """Generate a schedule"""
     try:
-        logging.info("Generate endpoint called")
         data = request.get_json()
-        logging.info(f"Request data: {data}")
         year = int(data.get('year', 2024))
         month = int(data.get('month', 1))
         group = data.get('group', 'sala')
@@ -476,40 +349,15 @@ def get_column_letter(n):
 @app.route('/api/export-excel', methods=['POST'])
 def export_excel():
     try:
-        # Debug logging
-        primary_scheduler = schedulers['sala']
-        print("Debug - scheduler attributes:")
-        print(f"Has year: {hasattr(primary_scheduler, 'year')}")
-        print(f"Has month: {hasattr(primary_scheduler, 'month')}")
+        wb = Workbook()
         
-        # Safety check for year and month
-        if not hasattr(primary_scheduler, 'year') or not hasattr(primary_scheduler, 'month'):
-            return jsonify({
-                'success': False,
-                'error': 'Please generate or load a schedule first'
-            }), 400
-            
-        # Get year and month safely
+        # Get current month data from sala group (primary group)
+        primary_scheduler = schedulers['sala']
         year = primary_scheduler.year
         month = primary_scheduler.month
-        
-        if year is None or month is None:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid year or month. Please generate a schedule first.'
-            }), 400
-
-        # Initialize all schedulers with the same month/year
-        for group_name in ['sala', 'cocina', 'coperia']:
-            scheduler = schedulers[group_name]
-            if not hasattr(scheduler, 'days_in_month') or scheduler.days_in_month is None:
-                scheduler.initialize_month(year, month)
-                scheduler.set_current_group(group_name)
-
-        wb = Workbook()
         month_names = ["January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December"]
-                
+        
         # Create worksheets for each group
         for group_name in ['sala', 'cocina', 'coperia']:
             scheduler = schedulers[group_name]
@@ -674,25 +522,6 @@ def export_excel():
             'error': str(e)
         }), 500
 
-def process_worker_list(worksheet_name, ws, scheduler):
-    """Process workers from Excel and merge with existing configuration"""
-    processed_workers = set()
-    
-    # Start from row 4 (after headers) until we hit counter rows
-    for row in range(4, ws.max_row + 1):
-        worker_name = ws.cell(row=row, column=1).value
-        if not worker_name or worker_name in ['Morning:', 'Afternoon:', 'Night:']:
-            break
-            
-        processed_workers.add(worker_name)
-        
-        # If worker isn't in either list, add them as full-time
-        if (worker_name not in scheduler.staff_groups[scheduler.current_group]['workers_full_time'] and 
-            worker_name not in scheduler.staff_groups[scheduler.current_group]['workers_part_time']):
-            scheduler.add_worker(worker_name, is_full_time=True)
-    
-    return processed_workers
-
 @app.route('/api/import-excel', methods=['POST'])
 def import_excel():
     try:
@@ -708,6 +537,7 @@ def import_excel():
         
         result_data = {}
         
+        print("\nStarting Excel import...")
         # Process each worksheet (group)
         for group_name in ['sala', 'cocina', 'coperia']:
             print(f"\nProcessing group: {group_name}")
@@ -720,7 +550,7 @@ def import_excel():
                 ws = wb[worksheet_name]
                 print(f"Successfully found worksheet: {worksheet_name}")
                 
-                # Extract month and year from title
+                # Extract month and year from title first
                 title = ws['A1'].value
                 month_year = title.split()
                 month = month_year[0]
@@ -731,31 +561,50 @@ def import_excel():
                               "July", "August", "September", "October", "November", "December"]
                 month_num = month_names.index(month) + 1
                 
-                # Initialize scheduler
+                # Print first few cells to verify content
+                for row in range(4, 7):  # Print first few workers
+                    worker_name = ws.cell(row=row, column=1).value
+                    first_shifts = [ws.cell(row=row, column=col).value for col in range(2, 6)]
+                    print(f"Worker: {worker_name}, First shifts: {first_shifts}")
+
+                # Initialize scheduler with extracted month/year
                 scheduler = schedulers[group_name]
                 scheduler.initialize_month(year, month_num)
                 scheduler.set_current_group(group_name)
                 
-                # Process workers and merge with existing configuration
-                processed_workers = process_worker_list(worksheet_name, ws, scheduler)
+                # Get the separator column position (where '║' is)
+                separator_col = None
+                for col in range(1, ws.max_column + 1):
+                    if ws.cell(row=2, column=col).value == '║':
+                        separator_col = col
+                        break
                 
-                # Save updated configuration
-                scheduler.save_staff_config()
-                
-                # Read schedule data as before
-                print(f"Reading schedule for {len(scheduler.selected_workers)} workers")
-                for worker_index, worker in enumerate(scheduler.selected_workers):
-                    if worker not in processed_workers:
-                        continue  # Skip workers not in the Excel file
+                # Read schedule data
+                for row in range(4, ws.max_row + 1):
+                    worker_name = ws.cell(row=row, column=1).value
+                    if not worker_name or worker_name in ['Morning:', 'Afternoon:', 'Night:']:
+                        break
                         
-                    print(f"Processing worker: {worker}")
+                    if worker_name not in scheduler.selected_workers:
+                        continue
+                        
+                    # Read main month shifts
                     for day in range(1, scheduler.days_in_month + 1):
                         col = day + 1  # +1 because first column is worker names
-                        cell_value = ws.cell(row=worker_index + 4, column=col).value
+                        cell_value = ws.cell(row=row, column=col).value
                         if cell_value:
-                            scheduler.assign_shift(day, worker, cell_value)
+                            scheduler.assign_shift(day, worker_name, cell_value)
+                    
+                    # Read preview days
+                    if separator_col:
+                        for day in range(1, 8):  # 7 preview days
+                            preview_col = separator_col + day
+                            cell_value = ws.cell(row=row, column=preview_col).value
+                            if cell_value and isinstance(cell_value, str):
+                                actual_day = scheduler.days_in_month + day
+                                scheduler.assign_shift(actual_day, worker_name, cell_value)
                 
-                # Store result
+                # Store result for this group
                 result_data[group_name] = {
                     'schedule': scheduler.get_month_schedule(),
                     'month_data': {
@@ -765,6 +614,11 @@ def import_excel():
                         'preview_days': 7
                     }
                 }
+                print(f"Stored schedule for {group_name}:")  # Debug print
+                # Print first worker's shifts
+                if scheduler.get_month_schedule():
+                    first_worker = scheduler.get_month_schedule()[0]
+                    print(f"First worker: {first_worker['name']}, first shifts: {[first_worker['shifts'].get(d) for d in range(1,5)]}")
                 
             except Exception as e:
                 print(f"Error with worksheet {worksheet_name}: {str(e)}")
@@ -781,44 +635,6 @@ def import_excel():
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500    
-@app.route('/api/load-session', methods=['POST'])
-def load_session():
-
-    """Load last saved session"""
-    try:
-        group = request.get_json().get('group', 'sala')
-        if group not in schedulers:
-            return jsonify({
-                'success': False,
-                'error': f'Invalid group: {group}'
-            }), 400
-
-        scheduler = schedulers[group]
-        scheduler.load_last_session()
-        
-        # Get the loaded schedule
-        schedule = scheduler.get_month_schedule()
-        
-        # Add month information
-        month_data = {
-            'year': scheduler.year,
-            'month': scheduler.month,
-            'days_in_month': scheduler.days_in_month,
-            'preview_days': scheduler.preview_days
-        }
-        
-        return jsonify({
-            'success': True,
-            'schedule': schedule,
-            'month_data': month_data
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
         }), 500
-    
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
