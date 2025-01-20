@@ -14,8 +14,10 @@ import unicodedata
 app = Flask(__name__, 
     template_folder='frontend/templates',
     static_folder='frontend/static'
+    
 )
 CORS(app)
+
 schedulers = {
     'sala': SchedulerCore(),
     'cocina': SchedulerCore(),
@@ -26,6 +28,14 @@ GROUP_NAMES = {
     'sala': 'Personal de Sala',
     'cocina': 'Cocina',
     'coperia': 'Copería'
+}
+
+# Global state to track all schedules
+global schedule_state
+schedule_state = {
+    'sala': {'schedule': None, 'year': None, 'month': None},
+    'cocina': {'schedule': None, 'year': None, 'month': None},
+    'coperia': {'schedule': None, 'year': None, 'month': None}
 }
 
 @app.route('/')
@@ -75,6 +85,13 @@ def generate():
         # Get the schedule data
         schedule = scheduler.get_month_schedule()
         
+        # Update schedule state
+        schedule_state[group] = {
+            'schedule': schedule,
+            'year': year,
+            'month': month
+        }
+        
         # Add month information
         month_data = {
             'year': year,
@@ -122,7 +139,7 @@ def update_shift():
                     'error': 'Cannot assign Morning shift after Tarde shift'
                 }), 400
 
-        # Add validation for removing DLs as before
+        # Add validation for removing DLs
         if shift != 'DL' and scheduler.get_shift(worker_index, day) == 'DL':
             dl_count = sum(1 for d in range(1, scheduler.days_in_month + 1)
                          if d != day and scheduler.get_shift(worker_index, d) == 'DL')
@@ -140,8 +157,16 @@ def update_shift():
             scheduler.assign_free_sundays()  # Ensure DL requirements are met
             scheduler.assign_l_days()        # Ensure L day rules are met
         
-        # Return the updated schedule
+        # Get the updated schedule
         schedule = scheduler.get_month_schedule()
+        
+        # Update schedule state
+        schedule_state[group] = {
+            'schedule': schedule,
+            'year': scheduler.year,
+            'month': scheduler.month
+        }
+        
         return jsonify({
             'success': True,
             'schedule': schedule
@@ -154,36 +179,53 @@ def update_shift():
 
 @app.route('/api/transfer', methods=['POST'])
 def transfer():
-    """Transfer preview data to next month"""
+    """Transfer preview data to next month for all groups"""
     try:
-        group = request.get_json().get('group', 'sala')
-        if group not in schedulers:
-            return jsonify({
-                'success': False,
-                'error': f'Invalid group: {group}'
-            }), 400
-
-        scheduler = schedulers[group]
-        # Call the transfer function
-        scheduler.transfer_to_next_month()
-
-        # Get the new schedule data
-        schedule = scheduler.get_month_schedule()
+        current_group = request.get_json().get('group', 'sala')
+        main_scheduler = schedulers[current_group]
+        current_year = main_scheduler.year
+        current_month = main_scheduler.month
         
-        # Add month information for the new month
-        month_data = {
-            'year': scheduler.year,
-            'month': scheduler.month,
-            'days_in_month': scheduler.days_in_month,
-            'preview_days': scheduler.preview_days
-        }
+        # Calculate next month and year
+        next_month = current_month + 1 if current_month < 12 else 1
+        next_year = current_year + 1 if current_month == 12 else current_year
         
+        result_data = {}
+        
+        # Transfer each group
+        for group_name in schedulers:
+            scheduler = schedulers[group_name]
+            scheduler.transfer_to_next_month()
+            
+            # Store result for this group
+            schedule = scheduler.get_month_schedule()
+            result_data[group_name] = {
+                'schedule': schedule,
+                'month_data': {
+                    'year': next_year,
+                    'month': next_month,
+                    'days_in_month': calendar.monthrange(next_year, next_month)[1],
+                    'preview_days': 7
+                }
+            }
+            
+            # Update schedule state
+            schedule_state[group_name] = {
+                'schedule': schedule,
+                'year': next_year,
+                'month': next_month
+            }
+
+        # Return all schedules but focus on the current group's data
         return jsonify({
             'success': True,
-            'schedule': schedule,
-            'month_data': month_data
+            'schedule': result_data[current_group]['schedule'],
+            'month_data': result_data[current_group]['month_data'],
+            'all_schedules': result_data
         })
+        
     except Exception as e:
+        print(f"Error during transfer: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -191,63 +233,78 @@ def transfer():
 
 @app.route('/api/complete-generate', methods=['POST'])
 def complete_generate():
-    """Complete and generate schedule after transfer"""
+    """Complete and generate schedule after transfer for all groups"""
     try:
-        group = request.get_json().get('group', 'sala')
-        if group not in schedulers:
-            return jsonify({
-                'success': False,
-                'error': f'Invalid group: {group}'
-            }), 400
+        current_group = request.get_json().get('group', 'sala')
+        main_scheduler = schedulers[current_group]
+        current_year = main_scheduler.year
+        current_month = main_scheduler.month
+        
+        print(f"Completing generation for {current_year}-{current_month}")
+        result_data = {}
+        
+        # Process each group
+        for group_name in schedulers:
+            scheduler = schedulers[group_name]
+            print(f"Processing complete generation for group: {group_name}")
+            
+            # Store preview week data temporarily
+            preview_data = {}
+            for worker_index, worker in enumerate(scheduler.selected_workers):
+                worker_shifts = {}
+                for day in range(1, 8):
+                    shift = scheduler.get_shift(worker_index, day)
+                    if shift:
+                        worker_shifts[day] = shift
+                preview_data[worker] = worker_shifts
+            
+            # Reinitialize schedule
+            scheduler.initialize_month(current_year, current_month)
+            
+            # Restore preview week
+            for worker, shifts in preview_data.items():
+                for day, shift in shifts.items():
+                    scheduler.assign_shift(day, worker, shift)
+            
+            # Generate the rest of the schedule
+            scheduler.assign_night_shifts_after_transfer()
+            scheduler.assign_free_sundays()
+            scheduler.assign_l_days()
+            scheduler.assign_dayshifts()
+            
+            # Get the updated schedule
+            schedule = scheduler.get_month_schedule()
+            
+            # Store result for this group
+            result_data[group_name] = {
+                'schedule': schedule,
+                'month_data': {
+                    'year': current_year,
+                    'month': current_month,
+                    'days_in_month': calendar.monthrange(current_year, current_month)[1],
+                    'preview_days': 7
+                }
+            }
+            
+            # Update schedule state
+            schedule_state[group_name] = {
+                'schedule': schedule,
+                'year': current_year,
+                'month': current_month
+            }
+            
+            print(f"Generation completed for {group_name} - Year: {current_year}, Month: {current_month}")
 
-        scheduler = schedulers[group]
-        
-        # Store preview week data temporarily
-        preview_data = {}
-        for worker_index, worker in enumerate(scheduler.selected_workers):
-            worker_shifts = {}
-            for day in range(1, 8):
-                shift = scheduler.get_shift(worker_index, day)
-                if shift:
-                    worker_shifts[day] = shift
-            preview_data[worker] = worker_shifts
-
-        # Clear schedule but keep core data
-        current_year = scheduler.year
-        current_month = scheduler.month
-        current_days = scheduler.days_in_month
-        
-        # Reinitialize schedule
-        scheduler.initialize_month(current_year, current_month)
-        
-        # Restore preview week
-        for worker, shifts in preview_data.items():
-            for day, shift in shifts.items():
-                scheduler.assign_shift(day, worker, shift)
-        
-        # Now follow the same sequence as initial generation
-        scheduler.assign_night_shifts_after_transfer()
-        scheduler.assign_free_sundays()
-        scheduler.assign_l_days()
-        scheduler.assign_dayshifts()
-        
-        # Get the updated schedule
-        schedule = scheduler.get_month_schedule()
-        
-        # Add month information
-        month_data = {
-            'year': scheduler.year,
-            'month': scheduler.month,
-            'days_in_month': scheduler.days_in_month,
-            'preview_days': 7
-        }
-        
+        # Return all schedules but focus on the current group's data
         return jsonify({
             'success': True,
-            'schedule': schedule,
-            'month_data': month_data
+            'schedule': result_data[current_group]['schedule'],
+            'month_data': result_data[current_group]['month_data'],
+            'all_schedules': result_data
         })
+        
     except Exception as e:
+        print(f"Error during complete generation: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -351,27 +408,40 @@ def export_excel():
     try:
         wb = Workbook()
         
-        # Get current month data from sala group (primary group)
-        primary_scheduler = schedulers['sala']
-        year = primary_scheduler.year
-        month = primary_scheduler.month
+        # Get current month data from the active group
+        primary_state = schedule_state['sala']
+        year = primary_state['year']
+        month = primary_state['month']
+        
+        print(f"Exporting schedule for year: {year}, month: {month}")
+        days_in_current_month = calendar.monthrange(year, month)[1]
+        
+        next_month = month + 1 if month < 12 else 1
+        next_year = year + 1 if month == 12 else year
+        
         month_names = ["January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December"]
         
         # Create worksheets for each group
         for group_name in ['sala', 'cocina', 'coperia']:
-            scheduler = schedulers[group_name]
+            # Use the stored state for this group
+            group_state = schedule_state[group_name]
+            if not group_state['schedule']:  # Skip if no schedule exists
+                continue
+                
+            print(f"\nProcessing group: {group_name}")
+            
             if group_name == 'sala':
                 ws = wb.active
                 ws.title = 'Personal de Sala'
             else:
                 ws = wb.create_sheet(title=GROUP_NAMES.get(group_name, group_name))
             
-            # Calculate last column
-            last_col = get_column_letter(scheduler.days_in_month + 9)
+            # Calculate last column (days + worker name + separator + 7 preview days + hours column)
+            last_col = get_column_letter(days_in_current_month + 9)
             
             # Set column widths
-            for col in range(1, scheduler.days_in_month + 10):
+            for col in range(1, days_in_current_month + 10):
                 col_letter = get_column_letter(col)
                 ws.column_dimensions[col_letter].width = 4
             ws.column_dimensions['A'].width = 12
@@ -414,11 +484,11 @@ def export_excel():
             ws['A2'].alignment = Alignment(horizontal='center', vertical='center')
             ws['A2'].border = thin_border
             
-            # Write days
-            for day in range(1, scheduler.days_in_month + 1):
+            # Write days for current month
+            for day in range(1, days_in_current_month + 1):
                 col = get_column_letter(day + 1)
-                date = f"{year}-{month:02d}-{day:02d}"
-                day_name = days[datetime.strptime(date, '%Y-%m-%d').weekday()]
+                date = datetime(year, month, day)
+                day_name = days[date.weekday()]
                 ws[f'{col}2'] = day_name
                 ws[f'{col}3'] = day
                 ws[f'{col}2'].font = Font(bold=True)
@@ -428,19 +498,18 @@ def export_excel():
                 ws[f'{col}2'].border = thin_border
                 ws[f'{col}3'].border = thin_border
             
-            # Add separator and preview days
-            separator_col = get_column_letter(scheduler.days_in_month + 2)
+            # Add separator
+            separator_col = get_column_letter(days_in_current_month + 2)
             ws[f'{separator_col}2'] = '║'
             ws[f'{separator_col}3'] = '║'
             ws[f'{separator_col}2'].border = thin_border
             ws[f'{separator_col}3'].border = thin_border
             
+            # Write preview days (first 7 days of next month)
             for day in range(1, 8):
-                col = get_column_letter(scheduler.days_in_month + 2 + day)
-                next_month = month + 1 if month < 12 else 1
-                next_year = year + 1 if month == 12 else year
-                date = f"{next_year}-{next_month:02d}-{day:02d}"
-                day_name = days[datetime.strptime(date, '%Y-%m-%d').weekday()]
+                col = get_column_letter(days_in_current_month + 2 + day)
+                date = datetime(next_year, next_month, day)
+                day_name = days[date.weekday()]
                 ws[f'{col}2'] = day_name
                 ws[f'{col}3'] = day
                 ws[f'{col}2'].font = Font(bold=True)
@@ -451,7 +520,7 @@ def export_excel():
                 ws[f'{col}3'].border = thin_border
             
             # Hours column
-            hours_col = get_column_letter(scheduler.days_in_month + 10)
+            hours_col = get_column_letter(days_in_current_month + 10)
             ws[f'{hours_col}2'] = 'Total'
             ws[f'{hours_col}3'] = 'Hours'
             ws[f'{hours_col}2'].font = Font(bold=True)
@@ -459,8 +528,10 @@ def export_excel():
             ws[f'{hours_col}2'].border = thin_border
             ws[f'{hours_col}3'].border = thin_border
             
-            # Write schedule data
-            schedule = scheduler.get_month_schedule()
+            # Write schedule data from stored state
+            schedule = group_state['schedule']
+            print(f"Writing schedule for {len(schedule)} workers")
+            
             for idx, worker in enumerate(schedule):
                 row = idx + 4
                 
@@ -470,7 +541,7 @@ def export_excel():
                 ws[f'A{row}'].border = thin_border
                 
                 # Write shifts for current month
-                for day in range(1, scheduler.days_in_month + 1):
+                for day in range(1, days_in_current_month + 1):
                     col = get_column_letter(day + 1)
                     shift = worker['shifts'].get(day, '')
                     ws[f'{col}{row}'] = shift
@@ -482,14 +553,13 @@ def export_excel():
                     ws[f'{col}{row}'].alignment = Alignment(horizontal='center')
                 
                 # Write separator
-                separator_col = get_column_letter(scheduler.days_in_month + 2)
                 ws[f'{separator_col}{row}'] = '║'
                 ws[f'{separator_col}{row}'].border = thin_border
                 
                 # Write preview days
                 for day in range(1, 8):
-                    col = get_column_letter(scheduler.days_in_month + 2 + day)
-                    actual_day = scheduler.days_in_month + day
+                    col = get_column_letter(days_in_current_month + 2 + day)
+                    actual_day = days_in_current_month + day
                     shift = worker['shifts'].get(actual_day, '')
                     ws[f'{col}{row}'] = shift
                     ws[f'{col}{row}'].border = thin_border
@@ -517,11 +587,11 @@ def export_excel():
         )
         
     except Exception as e:
+        print(f"Error during export: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
-
 @app.route('/api/import-excel', methods=['POST'])
 def import_excel():
     try:
@@ -636,5 +706,6 @@ def import_excel():
             'success': False,
             'error': str(e)
         }), 500
+    
 if __name__ == '__main__':
     app.run(debug=True)

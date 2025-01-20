@@ -1,9 +1,6 @@
 import calendar
 import random
 from datetime import datetime, timedelta
-import json
-import os
-from datetime import datetime
 
 class SchedulerCore:
     def __init__(self):
@@ -51,13 +48,6 @@ class SchedulerCore:
         self.schedule = {}  # Format: {(worker_index, day): shift_type}
         self.total_hours = {}
 
-        # Create autosave directory if it doesn't exist
-        if not os.path.exists('autosave'):
-            os.makedirs('autosave')
-        
-        # Try to load last session on initialization
-        self.load_last_session()
-
     def set_current_group(self, group):
         """Switch to a different staff group"""
         if group in self.staff_groups:
@@ -97,7 +87,6 @@ class SchedulerCore:
         worker_index = self.selected_workers.index(worker)
         self.schedule[(worker_index, day)] = shift_type
         self.update_total_hours()
-        
 
     def clear_shift(self, day, worker):
         """Clear a shift assignment"""
@@ -543,14 +532,11 @@ class SchedulerCore:
         # Store preview data
         preview_data = {}
         
-        # Get current month info
-        days_in_month = calendar.monthrange(self.year, self.month)[1]
-        
         # Store the preview shifts for each worker
         for worker_index, worker in enumerate(self.selected_workers):
             worker_shifts = []
             for day in range(1, 8):  # Get 7 preview days
-                preview_day = days_in_month + day
+                preview_day = self.days_in_month + day
                 shift = self.get_shift(worker_index, preview_day)
                 worker_shifts.append(shift)
             preview_data[worker] = worker_shifts
@@ -573,6 +559,7 @@ class SchedulerCore:
                     self.assign_shift(day, worker, shift)
         
         self.update_total_hours()
+
         
     def assign_night_shifts_after_transfer(self):
         """Special version of night shift assignment for after month transfer"""
@@ -854,5 +841,3 @@ class SchedulerCore:
                     self.assign_shift(next_day, second_replacement, "N")
             
             day = rest_day + 2
-
-    

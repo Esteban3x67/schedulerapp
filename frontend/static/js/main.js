@@ -1,11 +1,48 @@
 // Global variables
-let currentShift = null;
+let scheduleState = {
+    'sala': null,
+    'cocina': null,
+    'coperia': null
+};
+let currentGroup = 'sala';
 let isSelecting = false;
 let selectedCells = new Set();
 let currentSchedule = null;
+let currentShift = null;
+
+// Constants for group management
+const GROUPS = {
+    SALA: 'sala',
+    COCINA: 'cocina',
+    COPERIA: 'coperia'
+};
+
+const GROUP_NAMES = {
+    [GROUPS.SALA]: 'Personal de Sala',
+    [GROUPS.COCINA]: 'Cocina',
+    [GROUPS.COPERIA]: 'Copería'
+};
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
+    // Add group selector
+    const groupSelect = document.createElement('select');
+    groupSelect.id = 'groupSelect';
+    groupSelect.className = 'p-2 border rounded mr-4';
+    
+    Object.entries(GROUP_NAMES).forEach(([value, name]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = name;
+        groupSelect.appendChild(option);
+    });
+    
+    // Insert before month select
+    const monthSelect = document.getElementById('monthSelect');
+    monthSelect.parentNode.insertBefore(groupSelect, monthSelect);
+    
+    // Add event listener for group changes
+    groupSelect.addEventListener('change', handleGroupChange);
     // Add event listeners
     document.getElementById('generateBtn').addEventListener('click', generateSchedule);
     document.getElementById('transferBtn').addEventListener('click', transferPreview);
@@ -79,7 +116,8 @@ async function generateSchedule() {
             },
             body: JSON.stringify({ 
                 month: parseInt(month), 
-                year: parseInt(year) 
+                year: parseInt(year),
+                group: currentGroup
             })
         });
         
@@ -87,11 +125,15 @@ async function generateSchedule() {
         
         if (data.success) {
             displaySchedule(data.schedule, data.month_data);
+            scheduleState[currentGroup] = {
+                schedule: data.schedule,
+                month: month,
+                year: year
+            };
             updateConsecutiveDays();
             
-            // Add these new lines here
             try {
-                const verifyResponse = await fetch('http://127.0.0.1:5000/api/verify-schedule');
+                const verifyResponse = await fetch(`http://127.0.0.1:5000/api/verify-schedule?group=${currentGroup}`);
                 const verifyData = await verifyResponse.json();
                 if (verifyData.total_violations > 0) {
                     console.error('Schedule violations found:', verifyData.violations);
@@ -99,8 +141,6 @@ async function generateSchedule() {
             } catch (error) {
                 console.error('Error verifying schedule:', error);
             }
-            // End of new lines
-            
         } else {
             alert('Failed to generate schedule: ' + data.error);
         }
@@ -508,7 +548,7 @@ async function updateShift(worker, day, shift) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ worker, day, shift })
+            body: JSON.stringify({ worker, day, shift, group: currentGroup })
         });
         
         const data = await response.json();  
@@ -533,10 +573,12 @@ async function updateShift(worker, day, shift) {
             updateHourCount(worker);  
             updateShiftCounters();    
             updateConsecutiveDays();
+            updateWarnings(); // Add this line to update warnings whenever any shift changes
+
             
             // Only verify DLs if we're adding/removing a DL
             if (shift === 'DL' || oldShift === 'DL') {
-                const dlResponse = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
+                const dlResponse = await fetch(`http://127.0.0.1:5000/api/verify-dl-counts?group=${currentGroup}`);
                 const dlData = await dlResponse.json();
                 if (dlData.success) {
                     console.log('DL Status data:', dlData.dl_status);  // Debug log
@@ -570,12 +612,23 @@ async function updateShift(worker, day, shift) {
                     updateWarnings();
                 }
             }
+            
+            // Update stored state after all changes
+            scheduleState[currentGroup] = {
+                schedule: currentSchedule,
+                month: document.getElementById('monthSelect').value,
+                year: document.getElementById('yearSelect').value
+            };
+            
+            return true;
         } else {
             alert(data.error || 'Failed to update shift');
+            return false;
         }
     } catch (error) {
         console.error('Error:', error);
         alert('Failed to update shift. Please check the console for details.');
+        return false;
     }
 }
 // Helper function to update DL status for a single worker
@@ -831,7 +884,10 @@ async function transferPreview() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            body: JSON.stringify({ 
+                group: currentGroup 
+            })
         });
         
         const data = await response.json();
@@ -842,13 +898,23 @@ async function transferPreview() {
             let newMonth = parseInt(monthSelect.value) + 1;
             if (newMonth > 12) {
                 newMonth = 1;
-                // Optionally update year if needed
                 const yearSelect = document.getElementById('yearSelect');
                 yearSelect.value = (parseInt(yearSelect.value) + 1).toString();
             }
             monthSelect.value = newMonth.toString();
             
+            // Display the current group's schedule
             displaySchedule(data.schedule, data.month_data);
+            
+            // Store all schedules in the state
+            Object.keys(data.all_schedules).forEach(group => {
+                scheduleState[group] = {
+                    schedule: data.all_schedules[group].schedule,
+                    month: data.all_schedules[group].month_data.month.toString(),
+                    year: data.all_schedules[group].month_data.year.toString()
+                };
+            });
+            
         } else {
             alert('Failed to transfer preview: ' + data.error);
         }
@@ -863,31 +929,32 @@ async function completeGenerate() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            body: JSON.stringify({ 
+                group: currentGroup 
+            })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            // Update the month dropdown to match the new month
-            const monthSelect = document.getElementById('monthSelect');
-            monthSelect.value = data.month_data.month.toString();
-            
+            // Display the current group's schedule
             displaySchedule(data.schedule, data.month_data);
             
-            // Rest of your existing verification code
-            const verifyResponse = await fetch('http://127.0.0.1:5000/api/verify-schedule');
-            const verifyData = await verifyResponse.json();
-            if (verifyData.total_violations > 0) {
-                console.error('Schedule violations found:', verifyData.violations);
-            }
+            // Store all schedules in the state
+            Object.keys(data.all_schedules).forEach(group => {
+                scheduleState[group] = {
+                    schedule: data.all_schedules[group].schedule,
+                    month: data.all_schedules[group].month_data.month.toString(),
+                    year: data.all_schedules[group].month_data.year.toString()
+                };
+            });
             
-            // Verify DL counts
-            const dlResponse = await fetch('http://127.0.0.1:5000/api/verify-dl-counts');
-            const dlData = await dlResponse.json();
-            if (dlData.success) {
-                updateDLVerification();
-            }
+            // Update verifications
+            updateConsecutiveDays();
+            updateDLVerification();
+            updateWarnings();
+            
         } else {
             alert('Failed to complete schedule: ' + data.error);
         }
@@ -958,7 +1025,7 @@ async function handleFileUpload(event) {
     formData.append('file', file);
 
     try {
-        const response = await fetch('http://127.0.0.1:5000/api/import-excel', {
+        const response = await fetch(`http://127.0.0.1:5000/api/import-excel?group=${currentGroup}`, {
             method: 'POST',
             body: formData
         });
@@ -966,12 +1033,20 @@ async function handleFileUpload(event) {
         const data = await response.json();
         
         if (data.success) {
-            // Update month and year dropdowns to match imported schedule
-            document.getElementById('monthSelect').value = data.month_data.month.toString();
-            document.getElementById('yearSelect').value = data.month_data.year.toString();
-            
-            // Display the imported schedule
-            displaySchedule(data.schedule, data.month_data);
+            // Store all schedules
+            Object.keys(data.schedules).forEach(group => {
+                scheduleState[group] = {
+                    schedule: data.schedules[group].schedule,
+                    month: data.schedules[group].month_data.month.toString(),
+                    year: data.schedules[group].month_data.year.toString()
+                };
+            });
+
+            // Display current group's schedule
+            const currentGroupData = data.schedules[currentGroup];
+            document.getElementById('monthSelect').value = currentGroupData.month_data.month.toString();
+            document.getElementById('yearSelect').value = currentGroupData.month_data.year.toString();
+            displaySchedule(currentGroupData.schedule, currentGroupData.month_data);
             
             // Clear the file input
             event.target.value = '';
@@ -982,4 +1057,39 @@ async function handleFileUpload(event) {
         console.error('Error:', error);
         alert('Failed to import schedule. Please check the console for details.');
     }
+}
+// Handle group changes
+async function handleGroupChange(event) {
+    const newGroup = event.target.value;
+    
+    // Store current schedule state before switching
+    if (currentSchedule) {
+        scheduleState[currentGroup] = {
+            schedule: currentSchedule,
+            month: document.getElementById('monthSelect').value,
+            year: document.getElementById('yearSelect').value
+        };
+    }
+    
+    // Update current group
+    currentGroup = newGroup;
+    
+    // Load stored schedule if exists
+    if (scheduleState[currentGroup]) {
+        const storedState = scheduleState[currentGroup];
+        document.getElementById('monthSelect').value = storedState.month;
+        document.getElementById('yearSelect').value = storedState.year;
+        displaySchedule(storedState.schedule, {
+            month: parseInt(storedState.month),
+            year: parseInt(storedState.year),
+            days_in_month: new Date(storedState.year, storedState.month, 0).getDate(),
+            preview_days: 7
+        });
+    } else {
+        // If no stored schedule, generate a new one
+        await generateSchedule();
+    }
+    
+    // Update warnings
+    updateWarnings();
 }
